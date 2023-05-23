@@ -15,7 +15,7 @@ public class WelcomeController {
 	@GetMapping("message")
 	public ResponseEntity<String> getCategories() {
 
-		String welcomeMessage="Hello World from 'simplest-spring-boot-app' !!!";
+		String welcomeMessage="Hello World from 'spring-scheduler' with TLS and certificate expiry check with a Scheduler Task !!!";
 		System.out.println("welcome message is :" + welcomeMessage);
 		return new ResponseEntity<String>(welcomeMessage, HttpStatus.OK);
 	}
