@@ -53,8 +53,8 @@ public class ScheduledTasks {
         logger.info("certificate check starts");
 
         try {            
-            KeyStore keyStore = KeyStore.getInstance("JKS");
-            keyStore.load(new ClassPathResource("classpath:test.jks").getInputStream(), "password".toCharArray());
+            KeyStore keyStore = KeyStore.getInstance("PKCS12");
+            keyStore.load(new ClassPathResource("classpath:test.p12").getInputStream(), "password".toCharArray());
             Enumeration<String> aliases = keyStore.aliases();
 
             while(aliases.hasMoreElements()){

@@ -16,7 +16,7 @@ server.ssl.key-store=file:${PK12_LOCATION}
 
 ***pre-deploy:
 oc create secret generic spring-boot-jks-file --from-file test.p12
-oc create secret generic spring-boot-secrets --from-literal=JKS_PASSWORD=password --from-literal=JKS_LOCATION=/tmp/jks/test.p12
+oc create secret generic spring-boot-secrets --from-literal=JKS_PASSWORD=password --from-literal=JKS_LOCATION=/tmp/jks/test.p12 --from-literal=EMAIL_PASSWORD=password
 
 
 ***Build:
