@@ -1,0 +1,215 @@
+Git location: https://github.com/cloudapps-idey/spring-boot-scheduler.git
+
+
+Ref: References: https://edwin.baculsoft.com/2022/04/deploy-a-spring-boot-app-with-https-by-using-jks-file-into-openshift-4/
+
+Description: This app is adding :
+             a selfsigned tls cert resides in resources/test.jks ( see at the bottom how to generate cert)
+             a scheduler is added to check on the expiry of the cert test.jks
+             a sends email if it falls between the expiryAlertTriggerDays configured in the properties file and the actual expiry date in the cert. 
+           
+====================================================================
+             RUN Java Application Locally
+====================================================================
+
+mvn clean install
+java -jar target/springboot-scheduler-0.0.1-SNAPSHOT.jar 
+
+====================================================================
+             INVOKE URL
+====================================================================
+https://localhost:8443
+
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ RUN THIS APP ON OPENSHIFT =============================================
+
+Pre-deploy:
+1. create a configmap
+oc create configmap spring-scheduler-configmap --from-file=src/main/resources/application.properties 
+2. create a secret using the certificate
+oc create secret generic spring-scheduler-secret --from-file=src/main/resources/test.jks
+3. Create a Dockerfile
+FROM openjdk:11.0.7-jre-slim-buster
+LABEL base-image="openjdk:11.0.7-jre-slim-buster" \
+      java-version="11.0.7" \
+      purpose="Hello World with SSL, Java and Dockerfile" 
+MAINTAINER Indrani Dey <idey at red hat> 
+WORKDIR /deployments 
+COPY target/*.jar app.jar 
+USER 185 
+EXPOSE 8443 
+CMD ["java", "-jar","app.jar"]
+======================================================================
+            How to build image and run locally
+=====================================================================
+( use package-only-Dockerfile ( prerequsite: build jar with 'mvn clean install') )
+
+FROM registry.access.redhat.com/ubi9/openjdk-11 
+ENV PORT 8080
+EXPOSE 8080
+COPY target/*.jar /opt/app.jar
+WORKDIR /opt
+CMD ["java", "-jar", "app.jar"]
+
+
+docker build -t idey/simple-helloworld-app .
+docker run --name -p 8080:8080 s2i-app idey/simple-helloworld-app
+(invoke url to verify)
+
+To Stop the container and delete image:
+docker ps
+docker ps -a
+docker stop <container-id>
+docker rm <container-id>
+docker rmi <image-name>  [ from docker ps -a identify the name exaple idey/simple-spring-boot]
+[Start and Stop container:
+docker stop  <container-id>
+docker start <container-id>
+]
+=====================================================================
+                     Push to Quay 
+=====================================================================
+(use build-n-package-Dockerfile or jmx-Dockerfile)
+#
+# Build stage
+#
+FROM maven:3.6.0-jdk-11-slim AS build
+COPY src /home/app/src
+COPY pom.xml /home/app
+RUN mvn -f /home/app/pom.xml clean package
+
+#
+# Package stage
+#
+FROM openjdk:11-jre-slim
+COPY --from=build /home/app/target/*.jar /home/app/app.jar
+EXPOSE 8080
+ENTRYPOINT ["java","-jar","/home/app/app.jar"]
+
+
+
+
+docker login quay.io
+{username}
+{password}
+
+Create a repo in quay 
+idey1
+simple-helloworld-app ( make it public )
+
+docker build -t quay.io/idey1/simple-helloworld-app .
+docker image ( verify the image built)
+docker push quay.io/idey1/simple-helloworld-app:latest
+
+=====================================================================
+                     Push to Quay  ( for jmx port to test with cryostat )
+=====================================================================
+(use jmx-Dockerfile)
+Dockerfile:
+#
+# Build stage
+#
+FROM maven:3.6.0-jdk-11-slim AS build
+COPY src /home/app/src
+COPY pom.xml /home/app
+RUN mvn -f /home/app/pom.xml clean package
+
+#
+# Package stage
+#
+FROM openjdk:11-jre-slim
+COPY --from=build /home/app/target/*.jar /home/app/app.jar
+ENV JAVA_OPTS=" "
+EXPOSE 8080 9096
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -Dcom.sun.management.jmxremote.port=9096 -Dcom.sun.management.jmxremote.rmi.port=9096 -Dcom.sun.management.jmxremote.ssl=false -Dcom.sun.management.jmxremote.authenticate=false -jar /home/app/app.jar"]
+
+
+
+docker login quay.io
+{username}
+{password}
+
+Create a repo in quay 
+idey1
+simple-helloworld-app: ( make it public )
+
+docker build -t quay.io/idey1/simple-helloworld-app .
+docker image ( verify the image built)
+docker push quay.io/idey1/simple-helloworld-app:latest
+
+
+===================================================================
+                      Deploy via console
+===================================================================
+
+console->namespace->add->container-image
+select image 
+quay.io/idey/spring-helloworld-app
+
+====================================================================
+                     Deploy via Helm 
+====================================================================
+
+Create a helm direcotory
+
+helm
+    -- Chart.yaml
+    -- values.yaml
+    -- templates
+       -- deploymane.yaml
+       -- service.yaml
+       -- route.yaml
+
+helm command to deploy to Openshift
+1. create a project/namespace
+   app-demo
+2. terminal - sign to ocp
+   
+3. cd where helm directory can be seen
+
+app-demo
+helm upgrade --history-max=1 --atomic --timeout 10m --install simple-helloworld-app chart --set namespace=app-demo --set imgae-repo=quay.io/idey1/simple-helloworld-app:latest --namespace=app-demo --values chart/values.yaml
+
+app-sceduler
+helm upgrade --history-max=1 --atomic --timeout 10m --install simple-helloworld-app chart --set namespace=idey-scheduler --set imgae-repo=quay.io/idey1/simple-helloworld-app:latest --namespace=idey-scheduler --values chart/values.yaml
+
+Pre-deploy:
+1. create a configmap
+oc create configmap spring-scheduler-configmap --from-file=src/main/resources/application.properties 
+2. create a secret using the certificate
+oc create secret generic spring-scheduler-jks-file --from-file=src/main/resources/test.jks
+
+
+
+post deploy
+oc set volume deployment/simple-helloworld-app --add --name=simple-helloworld-app-mnt --secret-name=spring-scheduler-jks-file --mount-path=/tmp/jks/
+
+
+
+
+
+
+=============================================TLS CERTS============================================================
+
+
+-------------------------------- keytool JKS file------------------------------------------------
+JKS keystore:
+keytool -genkeypair -alias springboot -keyalg RSA -keysize 4096 -storetype JKS -keystore test.jks -validity 3650 -storepass password
+
+--------------------------------- keytool PCK12 --------------------------------------------------
+PCK12 keystore:
+keytool -genkeypair -alias test -keyalg RSA -keysize 4096 -storetype PKCS12 -keystore test.p12 -validity 3650 -storepass password
+keytool -genkey -keyalg RSA -alias test -keystore test.jks -storepass password -validity 365 -keysize 4096 -storetype pkcs12
+
+-------------------------- Generate .crt + .key in a keystore.p12 file ----------------------------
+openssl pkcs12 -export -in <mycert.crt> -inkey <mykey.key> -out keystore.p12 -name <alias>
+openssl pkcs12 -export -in app.crt -inkey app.key -out keystore.p12 -name app
+openssl pkcs12 -export -in app.crt -inkey app.key -out keystore.p12 -name app
+
+--------------------------- Generate .pem andn .key file ------------------------------------------
+openssl genrsa -des3 -out myCA.key 2048
+openssl req -x509 -new -nodes -key myCA.key -sha256 -days 1825 -out myCA.pem
+----------------------------Generate .pem .csr .key -----------------------------------------------
+openssl req -new -newkey rsa:4096 -nodes -keyout test.key -out test.csr
+openssl x509 -req -sha256 -days 365 -in test.csr -signkey test.key -out test.pem
+----------------------------------------------------------------------------------------------------
+
