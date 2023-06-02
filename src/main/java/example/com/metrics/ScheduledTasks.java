@@ -51,9 +51,6 @@ public class ScheduledTasks {
     @Value("${mock.vault}")
     private String mockVault;
 
-    @Value("${cronSchedule}")
-    private String cronSchedule;
-
     @Autowired
     ResourceLoader resourceLoader;
 
@@ -64,7 +61,8 @@ public class ScheduledTasks {
     public void scheduleTaskWithCronExpression() {
         retrieveCertFromVaultForStaging(); 
         checkCertificateInKeyStore();
-        checkCertificateInPem();
+        checkCertificateInPemSingle();
+        //checkCertificateInPem();
         cleanUpStagingDirectory();
     }
 
@@ -100,16 +98,44 @@ public class ScheduledTasks {
         } 
         logger.info("\nKEYSTORE FILE: certificate check Ends");
     } 
-    
-    public void checkCertificateInPem() {
+
+    public void checkCertificateInPemSingle()  {
 
         logger.info("\n\nPEM FILE: Certificate check starts" + dateTimeFormatter.format(LocalDateTime.now()));
-        File folder = new File(expiryCertStagingPath);
-        File[] listOfFiles = folder.listFiles();
-        logger.debug("PEM FILE:  No of Certificates = " + listOfFiles.length);
-        InputStream inStream = null;
-
         try { 
+            InputStream inStream = new ClassPathResource("./mock-vault/vault-file.pem").getInputStream();                 
+            CertificateFactory cf = CertificateFactory.getInstance("X.509");
+            X509Certificate cert = (X509Certificate) cf.generateCertificate(inStream);
+            Date expiryDate = (Date) cert.getNotAfter();
+            logger.info("PEM FILE: Certificate expires on " + expiryDate);
+            int daysLeft = Integer.valueOf(daysLeftToExpire(expiryDate));
+            int timeToTriggerDays = daysLeft - expiryAlertTriggerDays;
+            if ( (daysLeft - expiryAlertTriggerDays) <=  expiryAlertTriggerDays){
+                logger.info("PEM FILE: Sending email. Days to epxiry is : " + daysLeft + "triggerDays before: " + expiryAlertTriggerDays);                      
+                sendEmail(expiryAlertReceiverEmailaddress, "Certificate expiry", "Certificate expires on " + expiryDate);
+            }
+            else{
+                logger.info("PEM FILE: No email, days left to expire:" + daysLeft  + " expiry trigger days: " + expiryAlertTriggerDays + " days");
+                logger.info("PEM FILE: email will be send when  " + timeToTriggerDays + " days left");
+            }                         
+        } catch (CertificateException e) {
+            e.printStackTrace();
+        }catch (Exception e) {
+            e.printStackTrace();
+        } 
+        logger.info("\nPEM FILE: certificate check Ends");
+    } 
+    
+    public void checkCertificateInPem()  {
+
+        logger.info("\n\nPEM FILE: Certificate check starts" + dateTimeFormatter.format(LocalDateTime.now()));
+        try { 
+            //File folder = new ClassPathResource(expiryCertStagingPath).getFile();
+            File folder = new File(expiryCertStagingPath);
+            File[] listOfFiles = folder.listFiles();
+            logger.debug("PEM FILE:  No of Certificates = " + listOfFiles.length);
+            InputStream inStream = null;
+        
             for (int i = 0; i < listOfFiles.length; i++) {
 
                 if (listOfFiles[i].isFile()) {
