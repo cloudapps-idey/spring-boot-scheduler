@@ -36,3 +36,7 @@ oc create route passthrough  --service spring-boot-jks --port=8443
 **Test
 oc get route
 curl -kv https://<route>/welcome/message
+
+	Fake email server
+
+	https://medium.com/@dzivet/email-integration-in-spring-boot-with-a-fake-smtp-service-ethereal-677937bad4bf
